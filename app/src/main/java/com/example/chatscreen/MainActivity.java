@@ -1,5 +1,6 @@
 package com.example.chatscreen;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -7,15 +8,30 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.os.Bundle;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.Toast;
 
+import com.android.volley.AuthFailureError;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+import com.example.Sender;
 import com.example.User;
-import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.crashlytics.FirebaseCrashlytics;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.gson.Gson;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -26,6 +42,8 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton sendButton;
     private EditText messageField;
 
+    private RequestQueue requestQueue;
+
 
     private User currentUser;
 
@@ -34,11 +52,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        // Set Crash analytics
+        FirebaseCrashlytics.getInstance()
+                .setCrashlyticsCollectionEnabled(true);
+        FirebaseMessaging.getInstance().subscribeToTopic("all");
         sendButton = findViewById(R.id.send_btn);
         messageField = findViewById(R.id.message_field);
         rvChat = findViewById(R.id.rvChat);
         rvChat.setLayoutManager(new LinearLayoutManager(this));
-
+        requestQueue = Volley.newRequestQueue(this);
 
         if (getIntent() != null)
             currentUser = new Gson().fromJson(getIntent().getStringExtra("user"), User.class);
@@ -70,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
     public void sendMessage() {
         String content = messageField.getText().toString();
         if (!content.isEmpty() && FirebaseAuth.getInstance().getCurrentUser() != null) {
-            ChatMessage cm = new ChatMessage(System.currentTimeMillis(), FirebaseAuth.getInstance().getUid(),
+            ChatMessage cm = new ChatMessage(FirebaseAuth.getInstance().getUid(),
                     FirebaseAuth.getInstance().getCurrentUser()
                             .getEmail()
                             .split("@")[0], content,
@@ -79,7 +101,13 @@ public class MainActivity extends AppCompatActivity {
             FirebaseFirestore.getInstance()
                     .collection("chat")
                     .add(cm);
+            sendPushNotificationToFCM(cm);
         }
+
     }
 
+    public void sendPushNotificationToFCM(ChatMessage cm) {
+        Sender sender = new Sender("all",cm,this,this);
+        sender.sendNotification();
+    }
 }
